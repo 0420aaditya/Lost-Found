@@ -1,0 +1,23 @@
+# node_modules
+node_modules/
+
+# Environment files (contain real secrets)
+.env
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Working docs (keep README.md tracked)
+lost_and_found_mern_master_prompt.md
+session.md

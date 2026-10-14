@@ -1,0 +1,20 @@
+# ---- dependencies ----
+node_modules/
+
+# ---- environment files (never commit real secrets) ----
+server/.env
+client/.env
+
+# ---- uploaded images ----
+# Keep the folder, ignore the uploaded files themselves.
+server/uploads/*
+!server/uploads/.gitkeep
+
+# ---- build output ----
+client/dist/
+
+# ---- logs and OS files ----
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
