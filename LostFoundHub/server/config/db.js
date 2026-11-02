@@ -4,14 +4,17 @@ const mongoose = require("mongoose");
 
 async function connectDB() {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log(
       `MongoDB connected: ${conn.connection.host}/${conn.connection.name}`
     );
+    return conn;
   } catch (error) {
     console.error("MongoDB connection failed:", error.message);
-    // Stop the server if the database is not reachable.
-    process.exit(1);
+    // Let the caller decide whether to exit (server) or report (scripts/tests).
+    throw error;
   }
 }
 

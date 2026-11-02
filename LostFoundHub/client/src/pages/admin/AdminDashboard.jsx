@@ -1,5 +1,5 @@
 // pages/admin/AdminDashboard.jsx
-// Headline counts plus the four simple reports.
+// Headline counts plus the four reports. Every number comes from the API.
 import { useEffect, useState } from "react";
 import api from "../../api.js";
 import AdminNav from "../../components/AdminNav.jsx";
@@ -14,6 +14,7 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
     async function load() {
       try {
         const [dash, reqs, claims, inv, users] = await Promise.all([
@@ -23,17 +24,23 @@ function AdminDashboard() {
           api.get("/admin/reports/inventory"),
           api.get("/admin/reports/users"),
         ]);
+        if (!active) return;
         setCounts(dash.data.counts);
         setRequestsReport(reqs.data.report);
         setClaimsReport(claims.data.report);
         setInventoryReport(inv.data.report);
         setUsersReport(users.data.report);
       } catch (err) {
+        if (!active) return;
         setError(err.response?.data?.message || "Could not load dashboard");
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     }
     load();
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -48,7 +55,11 @@ function AdminDashboard() {
       <section className="admin-section">
         <div className="container">
           <AdminNav />
-          {error && <div className="alert error">{error}</div>}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
           {loading ? (
             <p className="empty">Loading...</p>
           ) : (
@@ -56,51 +67,55 @@ function AdminDashboard() {
               {counts && (
                 <div className="stat-grid">
                   <Stat num={counts.pendingRequests} label="Pending requests" />
-                  <Stat num={counts.approvedListings} label="Approved listings" />
+                  <Stat num={counts.activeListings} label="Active listings" />
                   <Stat num={counts.lostReports} label="Lost reports" />
                   <Stat num={counts.foundReports} label="Found reports" />
                   <Stat num={counts.pendingClaims} label="Pending claims" />
                   <Stat num={counts.itemsAtHub} label="Items at hub" />
                   <Stat
+                    num={counts.awaitingReceipt}
+                    label="Awaiting receipt"
+                  />
+                  <Stat
                     num={counts.completedHandovers}
                     label="Completed handovers"
                   />
-                  <Stat num={counts.totalUsers} label="Users" />
+                  <Stat num={counts.totalUsers} label="Total users" />
+                  <Stat num={counts.adminUsers} label="Admins" />
+                  <Stat num={counts.normalUsers} label="Normal users" />
+                  <Stat num={counts.activeUsers} label="Active users" />
                 </div>
               )}
 
-              <div className="card">
-                <h2>Requests report</h2>
+              <ReportCard title="Requests report">
                 {requestsReport.length === 0 ? (
                   <p className="empty">No data.</p>
                 ) : (
                   <ul>
-                    {requestsReport.map((row, i) => (
-                      <li key={i}>
+                    {requestsReport.map((row) => (
+                      <li key={`${row.type}-${row.status}`}>
                         {row.type} / {row.status}: <strong>{row.count}</strong>
                       </li>
                     ))}
                   </ul>
                 )}
-              </div>
+              </ReportCard>
 
-              <div className="card">
-                <h2>Claims report</h2>
+              <ReportCard title="Claims report">
                 {claimsReport.length === 0 ? (
                   <p className="empty">No data.</p>
                 ) : (
                   <ul>
-                    {claimsReport.map((row, i) => (
-                      <li key={i}>
+                    {claimsReport.map((row) => (
+                      <li key={row.status}>
                         {row.status}: <strong>{row.count}</strong>
                       </li>
                     ))}
                   </ul>
                 )}
-              </div>
+              </ReportCard>
 
-              <div className="card">
-                <h2>Inventory report</h2>
+              <ReportCard title="Inventory report">
                 {inventoryReport && (
                   <ul>
                     <li>
@@ -116,10 +131,9 @@ function AdminDashboard() {
                     </li>
                   </ul>
                 )}
-              </div>
+              </ReportCard>
 
-              <div className="card">
-                <h2>Users report</h2>
+              <ReportCard title="Users report">
                 {usersReport && (
                   <ul>
                     <li>
@@ -134,14 +148,26 @@ function AdminDashboard() {
                     <li>
                       Active: <strong>{usersReport.active}</strong>
                     </li>
+                    <li>
+                      Inactive: <strong>{usersReport.inactive}</strong>
+                    </li>
                   </ul>
                 )}
-              </div>
+              </ReportCard>
             </>
           )}
         </div>
       </section>
     </main>
+  );
+}
+
+function ReportCard({ title, children }) {
+  return (
+    <div className="card">
+      <h2>{title}</h2>
+      {children}
+    </div>
   );
 }
 

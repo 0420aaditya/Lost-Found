@@ -4,12 +4,16 @@
 import { useEffect, useState } from "react";
 import api from "../../api.js";
 import AdminNav from "../../components/AdminNav.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 function AdminClaims() {
   const [claims, setClaims] = useState([]);
   const [status, setStatus] = useState("pending");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dialog, setDialog] = useState(null);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -21,39 +25,83 @@ function AdminClaims() {
       setClaims(res.data.claims);
     } catch (err) {
       setError(err.response?.data?.message || "Could not load claims");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  async function decide(id, decision) {
-    const notes = window.prompt(
-      decision === "approved"
-        ? "Verification notes (what did you check?):"
-        : "Reason / notes for rejecting:"
-    );
-    if (!notes) return;
+  function openDecision(claim, decision) {
+    setError("");
+    setNotes("");
+    setDialog({ action: decision, claim });
+  }
+
+  function openHandover(claim) {
+    setError("");
+    setDialog({ action: "handover", claim });
+  }
+
+  function closeDialog() {
+    if (busy) return;
+    setDialog(null);
+    setNotes("");
+  }
+
+  async function confirmDialog() {
+    if (!dialog) return;
+
+    if (dialog.action === "handover") {
+      setBusy(true);
+      setError("");
+      try {
+        await api.patch(`/claims/${dialog.claim._id}/handover`);
+        setDialog(null);
+        await load();
+      } catch (err) {
+        setError(err.response?.data?.message || "Could not complete handover");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!notes.trim()) {
+      setError("Please enter admin notes for this decision.");
+      return;
+    }
+
+    setBusy(true);
     setError("");
     try {
-      await api.patch(`/claims/${id}/decision`, { decision, adminNotes: notes });
-      load();
+      await api.patch(`/claims/${dialog.claim._id}/decision`, {
+        decision: dialog.action,
+        adminNotes: notes.trim(),
+      });
+      setDialog(null);
+      setNotes("");
+      await load();
     } catch (err) {
       setError(err.response?.data?.message || "Could not record decision");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function handover(id) {
-    if (!window.confirm("Confirm the item was physically collected?")) return;
-    setError("");
-    try {
-      await api.patch(`/claims/${id}/handover`);
-      load();
-    } catch (err) {
-      setError(err.response?.data?.message || "Could not complete handover");
-    }
+  const isDecision = dialog?.action === "approved" || dialog?.action === "rejected";
+  const isReject = dialog?.action === "rejected";
+
+  let title = "Confirm handover?";
+  let message =
+    "This marks the claim as completed and the item as collected. The item will accept no new claims.";
+  if (isDecision) {
+    title = isReject ? "Reject this claim?" : "Approve this claim?";
+    message = isReject
+      ? "The item stays available and the claimant will see the claim as rejected."
+      : "The item will be reserved for this claimant and all other pending claims for it will be auto-rejected.";
   }
 
   return (
@@ -68,13 +116,17 @@ function AdminClaims() {
       <section className="admin-section">
         <div className="container">
           <AdminNav />
-          {error && <div className="alert error">{error}</div>}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
 
           <div className="card">
             <form
               className="filters"
-              onSubmit={(e) => {
-                e.preventDefault();
+              onSubmit={(event) => {
+                event.preventDefault();
                 load();
               }}
             >
@@ -82,7 +134,7 @@ function AdminClaims() {
                 Status
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={(event) => setStatus(event.target.value)}
                 >
                   <option value="">All</option>
                   <option value="pending">Pending</option>
@@ -102,49 +154,55 @@ function AdminClaims() {
           ) : claims.length === 0 ? (
             <p className="empty">No claims match.</p>
           ) : (
-            claims.map((c) => (
-              <div className="card" key={c._id}>
+            claims.map((claim) => (
+              <div className="card" key={claim._id}>
                 <h3>
-                  {c.itemId?.itemName || "Item removed"}{" "}
-                  <span className={`status ${c.status}`}>{c.status}</span>
+                  {claim.itemId?.itemName || "Item removed"}{" "}
+                  <span className={`status ${claim.status}`}>
+                    {claim.status}
+                  </span>
                 </h3>
                 <p className="muted">
-                  Claimant: {c.claimantId?.name} ({c.claimantId?.email})
+                  Claimant: {claim.claimantId?.name} ({claim.claimantId?.email})
                   <br />
-                  Phone: {c.contactPhone}
-                  {c.contactEmail ? ` | Email: ${c.contactEmail}` : ""}
+                  Phone: {claim.contactPhone}
+                  {claim.contactEmail ? ` | Email: ${claim.contactEmail}` : ""}
                 </p>
                 <p>
-                  <strong>Ownership explanation:</strong> {c.ownershipDetails}
+                  <strong>Ownership explanation:</strong>{" "}
+                  {claim.ownershipDetails}
                 </p>
-                {c.adminNotes && (
+                {claim.adminNotes && (
                   <p className="muted">
-                    <strong>Admin notes:</strong> {c.adminNotes}
+                    <strong>Admin notes:</strong> {claim.adminNotes}
                   </p>
                 )}
 
-                {c.status === "pending" && (
+                {claim.status === "pending" && (
                   <div className="btn-row">
                     <button
                       className="btn small"
-                      onClick={() => decide(c._id, "approved")}
+                      type="button"
+                      onClick={() => openDecision(claim, "approved")}
                     >
                       Approve
                     </button>
                     <button
                       className="btn small danger"
-                      onClick={() => decide(c._id, "rejected")}
+                      type="button"
+                      onClick={() => openDecision(claim, "rejected")}
                     >
                       Reject
                     </button>
                   </div>
                 )}
 
-                {c.status === "approved" && (
+                {claim.status === "approved" && (
                   <div className="btn-row">
                     <button
                       className="btn small"
-                      onClick={() => handover(c._id)}
+                      type="button"
+                      onClick={() => openHandover(claim)}
                     >
                       Confirm handover
                     </button>
@@ -155,6 +213,40 @@ function AdminClaims() {
           )}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(dialog)}
+        title={title}
+        message={message}
+        confirmLabel={
+          dialog?.action === "handover"
+            ? "Confirm handover"
+            : isReject
+            ? "Reject claim"
+            : "Approve claim"
+        }
+        danger={isReject}
+        busy={busy}
+        onCancel={closeDialog}
+        onConfirm={confirmDialog}
+      >
+        {isDecision && (
+          <div className="form-group">
+            <label htmlFor="claim-notes">
+              {isReject
+                ? "Reason / notes for rejecting*"
+                : "Verification notes (what did you check?)*"}
+            </label>
+            <textarea
+              id="claim-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={2000}
+              required
+            />
+          </div>
+        )}
+      </ConfirmDialog>
     </main>
   );
 }

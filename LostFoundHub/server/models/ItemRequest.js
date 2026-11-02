@@ -19,16 +19,19 @@ const itemRequestSchema = new mongoose.Schema(
       type: String,
       required: [true, "Item name is required"],
       trim: true,
+      maxlength: [120, "Item name is too long (max 120 characters)"],
     },
     category: {
       type: String,
       required: [true, "Category is required"],
       trim: true,
+      maxlength: [60, "Category is too long (max 60 characters)"],
     },
     description: {
       type: String,
       required: [true, "Description is required"],
       trim: true,
+      maxlength: [3000, "Description is too long (max 3000 characters)"],
     },
     dateLostOrFound: {
       type: Date,
@@ -38,17 +41,20 @@ const itemRequestSchema = new mongoose.Schema(
       type: String,
       required: [true, "Location is required"],
       trim: true,
+      maxlength: [200, "Location is too long (max 200 characters)"],
     },
     // Path to an uploaded image (e.g. "/uploads/1699999-photo.jpg"), optional.
     imageUrl: {
       type: String,
       default: "",
       trim: true,
+      maxlength: [300, "Image URL is too long"],
     },
     additionalDetails: {
       type: String,
       default: "",
       trim: true,
+      maxlength: [2000, "Additional details are too long (max 2000 characters)"],
     },
     status: {
       type: String,
@@ -59,6 +65,7 @@ const itemRequestSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+      maxlength: [1000, "Rejection reason is too long (max 1000 characters)"],
     },
     reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -75,5 +82,10 @@ const itemRequestSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Query patterns used by "my requests" and the admin request list/reports.
+itemRequestSchema.index({ userId: 1, createdAt: -1 });
+itemRequestSchema.index({ status: 1, createdAt: -1 });
+itemRequestSchema.index({ type: 1, status: 1 });
 
 module.exports = mongoose.model("ItemRequest", itemRequestSchema);

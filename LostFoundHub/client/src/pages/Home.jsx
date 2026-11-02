@@ -1,27 +1,46 @@
 // pages/Home.jsx
-// Landing page, matching the static index.html: a hero, a "how it works"
-// strip, a few recent items pulled from the public API, then success stories
-// and headline stats.
+// Landing page: hero, how the hub works, recent approved items, and live
+// aggregate statistics from the API (never fabricated numbers).
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api, { imageSrc } from "../api.js";
 
 function Home() {
   const [recent, setRecent] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let active = true;
     async function load() {
+      setLoading(true);
+      setError("");
       try {
-        const res = await api.get("/items");
-        setRecent(res.data.items.slice(0, 4));
+        const [itemsRes, statsRes] = await Promise.all([
+          api.get("/items", { params: { limit: 4, sort: "newest" } }),
+          api.get("/stats"),
+        ]);
+        if (!active) return;
+        setRecent(itemsRes.data.items);
+        setStats(statsRes.data.stats);
       } catch (err) {
+        if (!active) return;
         setRecent([]);
+        setStats(null);
+        setError(
+          err.response?.data?.message || "Could not load the latest hub data."
+        );
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   return (
     <main>
@@ -31,6 +50,10 @@ function Home() {
           <div className="hero-content">
             <h1>Lost something? Found something?</h1>
             <h2>Let's reconnect you.</h2>
+            <p>
+              Report an item, browse admin-reviewed listings, and submit a claim.
+              Found items are only claimable once they are physically at the hub.
+            </p>
             <div className="hero-buttons">
               <Link to="/submit?type=lost" className="btn btn-primary">
                 Report Lost Item
@@ -54,28 +77,28 @@ function Home() {
               </div>
               <h3>Report</h3>
               <p>
-                Submit details about the item you've lost or found, including
-                location and date.
+                Submit details about the item you lost or found, including the
+                location, date and an optional photo.
               </p>
             </div>
             <div className="step">
               <div className="step-icon">
-                <i className="fas fa-search"></i>
+                <i className="fas fa-user-shield"></i>
               </div>
-              <h3>Search</h3>
+              <h3>Admin Review</h3>
               <p>
-                Browse through listings to find a match for your lost or found
-                item.
+                An admin reviews every report. Approved reports become public
+                listings, and found items wait to be handed to the hub.
               </p>
             </div>
             <div className="step">
               <div className="step-icon">
                 <i className="fas fa-handshake"></i>
               </div>
-              <h3>Reconnect</h3>
+              <h3>Claim &amp; Collect</h3>
               <p>
-                Get in touch with the finder/owner and arrange to retrieve your
-                item.
+                If a found item is yours, submit a claim. The admin verifies
+                ownership privately and records the handover.
               </p>
             </div>
           </div>
@@ -86,6 +109,20 @@ function Home() {
       <section className="recent-items">
         <div className="container">
           <h2 className="section-title">Recent Items</h2>
+
+          {error && (
+            <div className="alert error" role="alert">
+              {error}{" "}
+              <button
+                type="button"
+                className="btn btn-sm secondary"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <p className="empty text-center">Loading...</p>
           ) : recent.length === 0 ? (
@@ -102,7 +139,11 @@ function Home() {
                 >
                   <div className="item-image">
                     {item.imageUrl ? (
-                      <img src={imageSrc(item.imageUrl)} alt={item.itemName} />
+                      <img
+                        src={imageSrc(item.imageUrl)}
+                        alt={item.itemName}
+                        loading="lazy"
+                      />
                     ) : (
                       <div className="no-image">No photo</div>
                     )}
@@ -135,36 +176,39 @@ function Home() {
         </div>
       </section>
 
-      {/* Success Stories Section */}
-      <section className="success-stories">
-        <div className="container">
-          <h2 className="section-title">Success Stories</h2>
-          <div className="story-card">
-            <div className="story-content">
-              <p>
-                "I lost my laptop during finals week and was devastated. Thanks
-                to Lost &amp; Found Hub, someone found it and I got it back
-                within 24 hours!"
-              </p>
-              <p className="story-author">- Aaditya D.J, Student</p>
+      {/* Live Statistics Section */}
+      {stats && (
+        <section className="success-stories">
+          <div className="container">
+            <h2 className="section-title">Hub at a Glance</h2>
+            <p className="text-center muted">
+              Live totals from the public hub listings.
+            </p>
+            <div className="stats-container">
+              <div className="stat-item">
+                <div className="stat-number">{stats.totalItems}</div>
+                <div className="stat-label">Items Listed</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-number">{stats.lostItems}</div>
+                <div className="stat-label">Lost Reports</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-number">{stats.foundItems}</div>
+                <div className="stat-label">Found Reports</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-number">{stats.reunited}</div>
+                <div className="stat-label">Reunited</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-number">{stats.atHub}</div>
+                <div className="stat-label">At the Hub</div>
+              </div>
             </div>
           </div>
-          <div className="stats-container">
-            <div className="stat-item">
-              <div className="stat-number">75+</div>
-              <div className="stat-label">Items Reunited</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-number">100+</div>
-              <div className="stat-label">Active Users</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-number">24h</div>
-              <div className="stat-label">Avg. Recovery Time</div>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   );
 }

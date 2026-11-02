@@ -1,5 +1,5 @@
 // pages/admin/AdminInventory.jsx
-// The hub's physical stock: found items with search, filters and counts.
+// The hub's physical stock: found items with search, filters and global counts.
 import { useEffect, useState } from "react";
 import api from "../../api.js";
 import AdminNav from "../../components/AdminNav.jsx";
@@ -10,6 +10,7 @@ function AdminInventory() {
     total: 0,
     inHub: 0,
     awaitingReceipt: 0,
+    collected: 0,
   });
   const [search, setSearch] = useState("");
   const [hubReceived, setHubReceived] = useState("");
@@ -30,8 +31,9 @@ function AdminInventory() {
       setCounts(res.data.counts);
     } catch (err) {
       setError(err.response?.data?.message || "Could not load inventory");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -50,7 +52,11 @@ function AdminInventory() {
       <section className="admin-section">
         <div className="container">
           <AdminNav />
-          {error && <div className="alert error">{error}</div>}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
 
           <div className="stat-grid">
             <div className="stat">
@@ -65,13 +71,17 @@ function AdminInventory() {
               <div className="num">{counts.awaitingReceipt}</div>
               <div className="label">Awaiting receipt</div>
             </div>
+            <div className="stat">
+              <div className="num">{counts.collected}</div>
+              <div className="label">Collected</div>
+            </div>
           </div>
 
           <div className="card">
             <form
               className="filters"
-              onSubmit={(e) => {
-                e.preventDefault();
+              onSubmit={(event) => {
+                event.preventDefault();
                 load();
               }}
             >
@@ -80,15 +90,16 @@ function AdminInventory() {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Item name..."
+                  maxLength={100}
                 />
               </label>
               <label>
                 At hub
                 <select
                   value={hubReceived}
-                  onChange={(e) => setHubReceived(e.target.value)}
+                  onChange={(event) => setHubReceived(event.target.value)}
                 >
                   <option value="">All</option>
                   <option value="true">Received</option>
@@ -99,12 +110,13 @@ function AdminInventory() {
                 Status
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={(event) => setStatus(event.target.value)}
                 >
                   <option value="">All</option>
                   <option value="open">Open</option>
                   <option value="claimed">Claimed</option>
                   <option value="collected">Collected</option>
+                  <option value="resolved">Resolved</option>
                 </select>
               </label>
               <button className="btn" type="submit">
@@ -130,21 +142,21 @@ function AdminInventory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it) => (
-                    <tr key={it._id}>
-                      <td>{it.itemName}</td>
+                  {items.map((item) => (
+                    <tr key={item._id}>
+                      <td>{item.itemName}</td>
                       <td>
-                        <span className={`status ${it.status}`}>
-                          {it.status}
+                        <span className={`status ${item.status}`}>
+                          {item.status}
                         </span>
                       </td>
-                      <td>{it.hubReceived ? "yes" : "no"}</td>
+                      <td>{item.hubReceived ? "yes" : "no"}</td>
                       <td>
-                        {it.hubReceivedAt
-                          ? new Date(it.hubReceivedAt).toLocaleDateString()
+                        {item.hubReceivedAt
+                          ? new Date(item.hubReceivedAt).toLocaleDateString()
                           : "-"}
                       </td>
-                      <td>{it.receivedBy?.name || "-"}</td>
+                      <td>{item.receivedBy?.name || "-"}</td>
                     </tr>
                   ))}
                 </tbody>

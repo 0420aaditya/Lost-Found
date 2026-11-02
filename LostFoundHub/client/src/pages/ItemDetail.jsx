@@ -9,6 +9,7 @@ function ItemDetail({ user }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Claim form state
   const [contactPhone, setContactPhone] = useState("");
@@ -16,25 +17,35 @@ function ItemDetail({ user }) {
   const [ownershipDetails, setOwnershipDetails] = useState("");
   const [claimMsg, setClaimMsg] = useState("");
   const [claimErr, setClaimErr] = useState("");
+  const [claiming, setClaiming] = useState(false);
 
   useEffect(() => {
+    let active = true;
     async function load() {
       setLoading(true);
+      setError("");
       try {
         const res = await api.get(`/items/${id}`);
+        if (!active) return;
         setItem(res.data.item);
       } catch (err) {
+        if (!active) return;
         setError(err.response?.data?.message || "Could not load item");
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, [id]);
+    return () => {
+      active = false;
+    };
+  }, [id, reloadKey]);
 
-  async function submitClaim(e) {
-    e.preventDefault();
+  async function submitClaim(event) {
+    event.preventDefault();
     setClaimMsg("");
     setClaimErr("");
+    setClaiming(true);
     try {
       await api.post("/claims", {
         itemId: id,
@@ -42,12 +53,17 @@ function ItemDetail({ user }) {
         contactEmail,
         ownershipDetails,
       });
-      setClaimMsg("Your claim was submitted. The admin will contact you.");
+      setClaimMsg(
+        "Your claim was submitted. The admin will contact you privately to verify ownership."
+      );
       setContactPhone("");
       setContactEmail("");
       setOwnershipDetails("");
+      setReloadKey((key) => key + 1);
     } catch (err) {
       setClaimErr(err.response?.data?.message || "Could not submit claim");
+    } finally {
+      setClaiming(false);
     }
   }
 
@@ -67,8 +83,21 @@ function ItemDetail({ user }) {
       <main>
         <section className="admin-section">
           <div className="container">
-            <p className="error">{error}</p>
-            <Link to="/items">&larr; Back to browse</Link>
+            <p className="error" role="alert">
+              {error}
+            </p>
+            <div className="btn-row">
+              <Link to="/items" className="btn secondary">
+                &larr; Back to browse
+              </Link>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
+                Try again
+              </button>
+            </div>
           </div>
         </section>
       </main>
@@ -78,7 +107,9 @@ function ItemDetail({ user }) {
 
   // A claim is only possible for a found item that is at the hub and still open.
   const claimable =
-    item.type === "found" && item.hubReceived && item.status === "open";
+    item.type === "found" &&
+    item.hubReceived &&
+    item.status === "open";
 
   return (
     <main>
@@ -100,10 +131,20 @@ function ItemDetail({ user }) {
 
           <div className="card">
             <div className="form-row">
-              <div className="form-group" style={{ flex: "0 0 320px", minWidth: 0 }}>
-                <div className="item-image" style={{ borderRadius: 8, overflow: "hidden" }}>
+              <div
+                className="form-group"
+                style={{ flex: "0 0 320px", minWidth: 0 }}
+              >
+                <div
+                  className="item-image"
+                  style={{ borderRadius: 8, overflow: "hidden" }}
+                >
                   {item.imageUrl ? (
-                    <img src={imageSrc(item.imageUrl)} alt={item.itemName} />
+                    <img
+                      src={imageSrc(item.imageUrl)}
+                      alt={item.itemName}
+                      loading="lazy"
+                    />
                   ) : (
                     <div className="no-image">No photo</div>
                   )}
@@ -122,7 +163,7 @@ function ItemDetail({ user }) {
                 </p>
                 {item.type === "found" && (
                   <p className="muted">
-                    At hub: {item.hubReceived ? "yes" : "not yet"}
+                    At hub: {item.hubReceived ? "Yes" : "Not yet"}
                   </p>
                 )}
               </div>
@@ -133,21 +174,31 @@ function ItemDetail({ user }) {
             <div className="form-container">
               <h2>Claim this item</h2>
               <p className="muted">
-                Contact details are only shown to the admin. They will contact
-                you privately to verify ownership.
+                Contact details and your ownership explanation are only shown to
+                the admin. They will contact you privately to verify ownership.
               </p>
-              {claimMsg && <div className="alert success">{claimMsg}</div>}
-              {claimErr && <div className="alert error">{claimErr}</div>}
+              {claimMsg && (
+                <div className="alert success" role="status">
+                  {claimMsg}
+                </div>
+              )}
+              {claimErr && (
+                <div className="alert error" role="alert">
+                  {claimErr}
+                </div>
+              )}
               {user ? (
-                <form onSubmit={submitClaim}>
+                <form onSubmit={submitClaim} noValidate>
                   <div className="form-group">
-                    <label htmlFor="phone">Your phone</label>
+                    <label htmlFor="phone">Your phone*</label>
                     <input
                       id="phone"
                       type="text"
                       value={contactPhone}
-                      onChange={(e) => setContactPhone(e.target.value)}
+                      onChange={(event) => setContactPhone(event.target.value)}
                       required
+                      maxLength={30}
+                      autoComplete="tel"
                     />
                   </div>
                   <div className="form-group">
@@ -156,20 +207,32 @@ function ItemDetail({ user }) {
                       id="cemail"
                       type="email"
                       value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
+                      onChange={(event) =>
+                        setContactEmail(event.target.value)
+                      }
+                      maxLength={254}
+                      autoComplete="email"
                     />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="ownership">Why is this yours?</label>
+                    <label htmlFor="ownership">Why is this yours?*</label>
                     <textarea
                       id="ownership"
                       value={ownershipDetails}
-                      onChange={(e) => setOwnershipDetails(e.target.value)}
+                      onChange={(event) =>
+                        setOwnershipDetails(event.target.value)
+                      }
+                      minLength={10}
+                      maxLength={3000}
                       required
                     />
                   </div>
-                  <button className="btn btn-primary" type="submit">
-                    Submit claim
+                  <button
+                    className="btn btn-primary"
+                    type="submit"
+                    disabled={claiming}
+                  >
+                    {claiming ? "Submitting..." : "Submit claim"}
                   </button>
                 </form>
               ) : (
@@ -177,6 +240,16 @@ function ItemDetail({ user }) {
                   Please <Link to="/login">log in</Link> to claim this item.
                 </p>
               )}
+            </div>
+          )}
+
+          {!claimable && item.type === "found" && (
+            <div className="card">
+              <h2>Claiming not available</h2>
+              <p className="muted">
+                This found item can only be claimed if it is physically at the
+                hub, is still open, and has not been collected.
+              </p>
             </div>
           )}
         </div>

@@ -27,16 +27,19 @@ const itemSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: [120, "Item name is too long (max 120 characters)"],
     },
     category: {
       type: String,
       required: true,
       trim: true,
+      maxlength: [60, "Category is too long (max 60 characters)"],
     },
     description: {
       type: String,
       required: true,
       trim: true,
+      maxlength: [3000, "Description is too long (max 3000 characters)"],
     },
     dateLostOrFound: {
       type: Date,
@@ -46,11 +49,13 @@ const itemSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: [200, "Location is too long (max 200 characters)"],
     },
     imageUrl: {
       type: String,
       default: "",
       trim: true,
+      maxlength: [300, "Image URL is too long"],
     },
     // Simple, clear status values:
     //   lost items  : open -> resolved
@@ -89,12 +94,15 @@ const itemSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+      maxlength: [1000, "Deletion reason is too long (max 1000 characters)"],
     },
   },
   { timestamps: true }
 );
 
-// Speeds up the public listing/search queries.
-itemSchema.index({ isDeleted: 1, type: 1, status: 1 });
+// Speeds up the public listing, filter, and inventory queries.
+itemSchema.index({ isDeleted: 1, createdAt: -1 });
+itemSchema.index({ isDeleted: 1, type: 1, category: 1, status: 1 });
+itemSchema.index({ type: 1, isDeleted: 1, hubReceived: 1, status: 1 });
 
 module.exports = mongoose.model("Item", itemSchema);

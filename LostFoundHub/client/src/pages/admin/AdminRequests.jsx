@@ -1,8 +1,9 @@
 // pages/admin/AdminRequests.jsx
-// Review pending requests and approve or reject them.
+// Review requests and approve or reject them with an accessible confirmation.
 import { useEffect, useState } from "react";
 import api from "../../api.js";
 import AdminNav from "../../components/AdminNav.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 function AdminRequests() {
   const [requests, setRequests] = useState([]);
@@ -10,6 +11,9 @@ function AdminRequests() {
   const [status, setStatus] = useState("pending");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dialog, setDialog] = useState(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -22,35 +26,60 @@ function AdminRequests() {
       setRequests(res.data.requests);
     } catch (err) {
       setError(err.response?.data?.message || "Could not load requests");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  async function approve(id) {
+  function openApprove(request) {
+    setError("");
+    setReason("");
+    setDialog({ action: "approve", request });
+  }
+
+  function openReject(request) {
+    setError("");
+    setReason("");
+    setDialog({ action: "reject", request });
+  }
+
+  function closeDialog() {
+    if (busy) return;
+    setDialog(null);
+    setReason("");
+  }
+
+  async function confirmDialog() {
+    if (!dialog) return;
+    if (dialog.action === "reject" && !reason.trim()) {
+      setError("Please enter a rejection reason.");
+      return;
+    }
+    setBusy(true);
     setError("");
     try {
-      await api.patch(`/requests/${id}/approve`);
-      load();
+      if (dialog.action === "approve") {
+        await api.patch(`/requests/${dialog.request._id}/approve`);
+      } else {
+        await api.patch(`/requests/${dialog.request._id}/reject`, {
+          reason: reason.trim(),
+        });
+      }
+      setDialog(null);
+      setReason("");
+      await load();
     } catch (err) {
-      setError(err.response?.data?.message || "Could not approve");
+      setError(err.response?.data?.message || "Could not update the request");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function reject(id) {
-    const reason = window.prompt("Reason for rejection:");
-    if (!reason) return;
-    setError("");
-    try {
-      await api.patch(`/requests/${id}/reject`, { reason });
-      load();
-    } catch (err) {
-      setError(err.response?.data?.message || "Could not reject");
-    }
-  }
+  const isReject = dialog?.action === "reject";
 
   return (
     <main>
@@ -64,19 +93,26 @@ function AdminRequests() {
       <section className="admin-section">
         <div className="container">
           <AdminNav />
-          {error && <div className="alert error">{error}</div>}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
 
           <div className="card">
             <form
               className="filters"
-              onSubmit={(e) => {
-                e.preventDefault();
+              onSubmit={(event) => {
+                event.preventDefault();
                 load();
               }}
             >
               <label>
                 Type
-                <select value={type} onChange={(e) => setType(e.target.value)}>
+                <select
+                  value={type}
+                  onChange={(event) => setType(event.target.value)}
+                >
                   <option value="">All</option>
                   <option value="lost">Lost</option>
                   <option value="found">Found</option>
@@ -86,7 +122,7 @@ function AdminRequests() {
                 Status
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={(event) => setStatus(event.target.value)}
                 >
                   <option value="">All</option>
                   <option value="pending">Pending</option>
@@ -118,35 +154,49 @@ function AdminRequests() {
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => (
-                    <tr key={r._id}>
-                      <td>{r.itemName}</td>
+                  {requests.map((request) => (
+                    <tr key={request._id}>
+                      <td>{request.itemName}</td>
                       <td>
-                        <span className={`status ${r.type}`}>{r.type}</span>
+                        <span className={`status ${request.type}`}>
+                          {request.type}
+                        </span>
                       </td>
-                      <td>{r.userId?.email}</td>
+                      <td>{request.userId?.email}</td>
                       <td>
-                        <span className={`status ${r.status}`}>{r.status}</span>
+                        <span className={`status ${request.status}`}>
+                          {request.status}
+                        </span>
+                        {request.status === "rejected" &&
+                          request.rejectionReason && (
+                            <div className="muted">
+                              {request.rejectionReason}
+                            </div>
+                          )}
                       </td>
                       <td>
-                        {r.locationLostOrFound}
+                        {request.locationLostOrFound}
                         <br />
                         <span className="muted">
-                          {new Date(r.dateLostOrFound).toLocaleDateString()}
+                          {new Date(
+                            request.dateLostOrFound
+                          ).toLocaleDateString()}
                         </span>
                       </td>
                       <td>
-                        {r.status === "pending" && (
+                        {request.status === "pending" && (
                           <div className="btn-row">
                             <button
                               className="btn small"
-                              onClick={() => approve(r._id)}
+                              type="button"
+                              onClick={() => openApprove(request)}
                             >
                               Approve
                             </button>
                             <button
                               className="btn small danger"
-                              onClick={() => reject(r._id)}
+                              type="button"
+                              onClick={() => openReject(request)}
                             >
                               Reject
                             </button>
@@ -161,6 +211,34 @@ function AdminRequests() {
           )}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(dialog)}
+        title={isReject ? "Reject this request?" : "Approve this request?"}
+        message={
+          isReject
+            ? "The request stays in history and the user will see your reason."
+            : `"${dialog?.request?.itemName || ""}" will become a public official listing. This cannot be undone.`
+        }
+        confirmLabel={isReject ? "Reject request" : "Approve and publish"}
+        danger={isReject}
+        busy={busy}
+        onCancel={closeDialog}
+        onConfirm={confirmDialog}
+      >
+        {isReject && (
+          <div className="form-group">
+            <label htmlFor="reject-reason">Rejection reason*</label>
+            <textarea
+              id="reject-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              maxLength={1000}
+              required
+            />
+          </div>
+        )}
+      </ConfirmDialog>
     </main>
   );
 }

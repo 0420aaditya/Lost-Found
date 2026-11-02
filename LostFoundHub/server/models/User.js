@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, "Name is required"],
       trim: true,
+      maxlength: [80, "Name is too long (max 80 characters)"],
     },
     email: {
       type: String,
@@ -15,6 +16,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: [254, "Email is too long (max 254 characters)"],
     },
     // We store ONLY the bcrypt hash of the password, never the plain text.
     // "select: false" means this field is hidden from normal queries by default.
@@ -36,5 +38,8 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Speeds up the admin user report counts.
+userSchema.index({ role: 1, isActive: 1 });
 
 module.exports = mongoose.model("User", userSchema);

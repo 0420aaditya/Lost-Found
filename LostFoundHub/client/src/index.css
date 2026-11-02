@@ -1306,3 +1306,145 @@ footer {
     font-size: 1.9rem;
   }
 }
+
+/* ---------- Form field label used for non-input groups ---------- */
+.field-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--dark-color);
+}
+
+/* ---------- Accessible visually-hidden text ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Image uploader ---------- */
+.image-uploader {
+  border: 1px dashed var(--border-color, #dee2e6);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  background: #fff;
+}
+.image-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: var(--border-radius);
+  margin-bottom: 0.75rem;
+}
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 320px;
+  height: 200px;
+  border-radius: var(--border-radius);
+  background: var(--light-color);
+  color: var(--gray-color);
+  margin-bottom: 0.75rem;
+}
+.image-placeholder i {
+  font-size: 2rem;
+}
+.image-uploader-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ---------- Pagination (buttons version) ---------- */
+.pagination {
+  align-items: center;
+}
+.pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pagination-page {
+  min-width: 2.25rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border-color, #dee2e6);
+  border-radius: var(--border-radius);
+  background: #fff;
+  color: var(--dark-color);
+  font-weight: 600;
+  cursor: pointer;
+}
+.pagination-page:hover {
+  background: var(--light-color);
+}
+.pagination-page.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #fff;
+}
+.pagination-ellipsis {
+  padding: 0.4rem 0.35rem;
+  color: var(--gray-color);
+}
+
+/* ---------- Accessible confirmation dialog ---------- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+.dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 1.75rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.dialog h2 {
+  margin-bottom: 0.75rem;
+}
+.dialog .form-group {
+  margin-top: 1rem;
+}
+.dialog .btn-row {
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+/* ---------- Small inline action forms ---------- */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin-top: 0.5rem;
+}
+.inline-form .form-group {
+  flex: 1;
+  min-width: 200px;
+  margin-bottom: 0;
+}

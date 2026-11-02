@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import api from "../../api.js";
 import AdminNav from "../../components/AdminNav.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 function AdminItems() {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dialog, setDialog] = useState(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -17,47 +21,84 @@ function AdminItems() {
       setItems(res.data.items);
     } catch (err) {
       setError(err.response?.data?.message || "Could not load items");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  async function receive(id) {
+  function openReceive(item) {
+    setError("");
+    setDialog({ action: "receive", item });
+  }
+
+  function openDelete(item) {
+    setError("");
+    setReason("");
+    setDialog({ action: "delete", item, conflict: "" });
+  }
+
+  function closeDialog() {
+    if (busy) return;
+    setDialog(null);
+    setReason("");
+  }
+
+  async function confirmDialog() {
+    if (!dialog) return;
+
+    if (dialog.action === "receive") {
+      setBusy(true);
+      setError("");
+      try {
+        await api.patch(`/items/${dialog.item._id}/receive-at-hub`);
+        setDialog(null);
+        await load();
+      } catch (err) {
+        setError(err.response?.data?.message || "Could not record receipt");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!reason.trim()) {
+      setError("Please enter a deletion reason.");
+      return;
+    }
+
+    setBusy(true);
     setError("");
     try {
-      await api.patch(`/items/${id}/receive-at-hub`);
-      load();
+      const confirmed = dialog.action === "conflict";
+      await api.patch(`/items/${dialog.item._id}/soft-delete`, {
+        reason: reason.trim(),
+        confirm: confirmed,
+      });
+      setDialog(null);
+      setReason("");
+      await load();
     } catch (err) {
-      setError(err.response?.data?.message || "Could not record receipt");
+      // 409 with pendingClaims means the admin must explicitly confirm.
+      if (
+        err.response?.status === 409 &&
+        err.response.data?.pendingClaims &&
+        dialog.action !== "conflict"
+      ) {
+        setDialog({ ...dialog, action: "conflict", conflict: err.response.data.message });
+      } else {
+        setError(err.response?.data?.message || "Could not delete item");
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function softDelete(id) {
-    const reason = window.prompt("Reason for removing this listing:");
-    if (!reason) return;
-    setError("");
-    try {
-      await api.patch(`/items/${id}/soft-delete`, { reason });
-      load();
-    } catch (err) {
-      // 409 means there are pending claims and the admin must confirm.
-      if (err.response?.status === 409) {
-        const ok = window.confirm(err.response.data.message);
-        if (!ok) return;
-        try {
-          await api.patch(`/items/${id}/soft-delete`, { reason, confirm: true });
-          load();
-        } catch (err2) {
-          setError(err2.response?.data?.message || "Could not delete");
-        }
-      } else {
-        setError(err.response?.data?.message || "Could not delete");
-      }
-    }
-  }
+  const isDelete = dialog?.action === "delete" || dialog?.action === "conflict";
+  const isConflict = dialog?.action === "conflict";
 
   return (
     <main>
@@ -71,10 +112,16 @@ function AdminItems() {
       <section className="admin-section">
         <div className="container">
           <AdminNav />
-          {error && <div className="alert error">{error}</div>}
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
+          )}
 
           {loading ? (
             <p className="empty">Loading...</p>
+          ) : items.length === 0 ? (
+            <p className="empty">No official items yet.</p>
           ) : (
             <div className="table-wrap">
               <table>
@@ -89,46 +136,50 @@ function AdminItems() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it) => (
+                  {items.map((item) => (
                     <tr
-                      key={it._id}
-                      style={it.isDeleted ? { opacity: 0.55 } : {}}
+                      key={item._id}
+                      style={item.isDeleted ? { opacity: 0.55 } : {}}
                     >
                       <td>
-                        {it.itemName}
-                        {it.isDeleted && (
+                        {item.itemName}
+                        {item.isDeleted && (
                           <>
                             <br />
                             <span className="error">
-                              deleted: {it.deletionReason}
+                              deleted: {item.deletionReason}
                             </span>
                           </>
                         )}
                       </td>
                       <td>
-                        <span className={`status ${it.type}`}>{it.type}</span>
-                      </td>
-                      <td>
-                        <span className={`status ${it.status}`}>
-                          {it.status}
+                        <span className={`status ${item.type}`}>
+                          {item.type}
                         </span>
                       </td>
-                      <td>{it.hubReceived ? "yes" : "no"}</td>
-                      <td>{it.reportedBy?.email}</td>
                       <td>
-                        {!it.isDeleted && (
+                        <span className={`status ${item.status}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td>{item.hubReceived ? "yes" : "no"}</td>
+                      <td>{item.reportedBy?.email}</td>
+                      <td>
+                        {!item.isDeleted && (
                           <div className="btn-row">
-                            {it.type === "found" && !it.hubReceived && (
+                            {item.type === "found" && !item.hubReceived && (
                               <button
                                 className="btn small"
-                                onClick={() => receive(it._id)}
+                                type="button"
+                                onClick={() => openReceive(item)}
                               >
                                 Record receipt
                               </button>
                             )}
                             <button
                               className="btn small danger"
-                              onClick={() => softDelete(it._id)}
+                              type="button"
+                              onClick={() => openDelete(item)}
                             >
                               Delete
                             </button>
@@ -143,6 +194,48 @@ function AdminItems() {
           )}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(dialog)}
+        title={
+          dialog?.action === "receive"
+            ? "Record physical receipt?"
+            : isConflict
+            ? "This item has pending claims"
+            : "Remove this listing?"
+        }
+        message={
+          dialog?.action === "receive"
+            ? `Confirm that "${dialog?.item?.itemName || ""}" was physically handed in to the hub.`
+            : isConflict
+            ? dialog?.conflict
+            : `"${dialog?.item?.itemName || ""}" will be hidden from public listings. The record and history are kept.`
+        }
+        confirmLabel={
+          dialog?.action === "receive"
+            ? "Record receipt"
+            : isConflict
+            ? "Delete and reject claims"
+            : "Delete listing"
+        }
+        danger={isDelete}
+        busy={busy}
+        onCancel={closeDialog}
+        onConfirm={confirmDialog}
+      >
+        {isDelete && (
+          <div className="form-group">
+            <label htmlFor="delete-reason">Deletion reason*</label>
+            <textarea
+              id="delete-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              maxLength={1000}
+              required
+            />
+          </div>
+        )}
+      </ConfirmDialog>
     </main>
   );
 }

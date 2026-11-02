@@ -8,19 +8,31 @@ import api from "../api.js";
 function MyClaims() {
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let active = true;
     async function load() {
+      setLoading(true);
+      setError("");
       try {
         const res = await api.get("/claims/my");
+        if (!active) return;
         setClaims(res.data.claims);
       } catch (err) {
+        if (!active) return;
         setClaims([]);
+        setError(err.response?.data?.message || "Could not load your claims.");
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   return (
     <main>
@@ -33,26 +45,53 @@ function MyClaims() {
 
       <section>
         <div className="container">
+          {error && (
+            <div className="alert error" role="alert">
+              {error}{" "}
+              <button
+                type="button"
+                className="btn btn-sm secondary"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <p className="empty">Loading...</p>
           ) : claims.length === 0 ? (
-            <p className="empty">You have not claimed any items yet.</p>
+            <p className="empty">
+              You have not claimed any items yet.{" "}
+              <Link to="/items?type=found">Browse found items</Link>.
+            </p>
           ) : (
-            claims.map((c) => (
-              <div className="card" key={c._id}>
+            claims.map((claim) => (
+              <div className="card" key={claim._id}>
                 <h3>
-                  {c.itemId?.itemName || "Item removed"}{" "}
-                  <span className={`status ${c.status}`}>{c.status}</span>
+                  {claim.itemId?.itemName || "Item removed"}{" "}
+                  <span className={`status ${claim.status}`}>
+                    {claim.status}
+                  </span>
                 </h3>
                 <p className="muted">
-                  Claimed on {new Date(c.createdAt).toLocaleDateString()}
+                  Claimed on{" "}
+                  {new Date(claim.createdAt).toLocaleDateString()}
                 </p>
-                <p>{c.ownershipDetails}</p>
-                {c.status === "completed" && (
-                  <p className="success">Handover completed. Thank you!</p>
+                <p>{claim.ownershipDetails}</p>
+                {claim.status === "rejected" && (
+                  <p className="error">
+                    This claim was not approved. Contact the hub if you believe
+                    this is a mistake.
+                  </p>
                 )}
-                {c.itemId?._id && (
-                  <Link to={`/items/${c.itemId._id}`}>View item</Link>
+                {claim.status === "completed" && (
+                  <p className="success">
+                    Handover completed. Thank you!
+                  </p>
+                )}
+                {claim.itemId?._id && (
+                  <Link to={`/items/${claim.itemId._id}`}>View item</Link>
                 )}
               </div>
             ))

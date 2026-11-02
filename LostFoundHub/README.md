@@ -61,8 +61,9 @@ LostFoundHub/
 │  │  ├─ auth.js               # protect + requireAdmin
 │  │  └─ upload.js             # multer image storage
 │  ├─ models/                  # User, ItemRequest, Item, ClaimRequest
-│  ├─ routes/                  # auth, requests, uploads, items, claims, admin
+│  ├─ routes/                  # auth, requests, uploads, items, claims, admin, stats
 │  ├─ seeds/createAdmin.js     # create the first admin
+│  ├─ tests/integration.test.js# end-to-end API tests (node:test)
 │  ├─ uploads/                 # uploaded images (served at /uploads)
 │  ├─ .env.example
 │  ├─ package.json
@@ -70,7 +71,8 @@ LostFoundHub/
 └─ client/                     # React app
    ├─ src/
    │  ├─ api.js, auth.js       # shared axios + session helpers
-   │  ├─ components/           # Navbar, ProtectedRoute, AdminNav
+   │  ├─ components/           # Navbar, ProtectedRoute, AdminNav,
+   │  │                        # ImageUploader, Pagination, ConfirmDialog
    │  ├─ pages/                # user pages
    │  ├─ pages/admin/          # admin pages
    │  ├─ App.jsx, main.jsx, index.css
@@ -115,7 +117,16 @@ MONGODB_URI=mongodb://127.0.0.1:27017/lostfoundhub
 JWT_SECRET=replace-this-with-a-long-random-string
 JWT_EXPIRES_IN=7d
 CLIENT_ORIGIN=http://localhost:5173
+# Optional: where uploaded images are stored (defaults to server/uploads).
+# UPLOAD_DIR=uploads
+# Optional: set to "true" when running behind a reverse proxy (e.g. Nginx/Heroku).
+# TRUST_PROXY=true
 ```
+
+`UPLOAD_DIR` may be relative to `server/` or absolute. Uploaded files live on
+the local disk, so in production point it at a **persistent volume**; container
+filesystems are usually ephemeral. If the folder is wiped, image links break
+while the database records remain.
 
 **`client/.env`**
 
@@ -171,6 +182,7 @@ Log in as the admin with the email/password you seeded above.
 | GET    | `/api/requests/:id`                  | owner/admin   | one request                          |
 | PATCH  | `/api/requests/:id/approve`          | admin         | approve; creates one item            |
 | PATCH  | `/api/requests/:id/reject`           | admin         | reject with a reason                 |
+| GET    | `/api/stats`                         | public        | site-wide item/reunion counts        |
 | GET    | `/api/items`                         | public        | approved, non-deleted listings       |
 | GET    | `/api/items/:id`                     | public        | one item (admins may see deleted)    |
 | GET    | `/api/items/my`                      | logged in     | own item records                     |
@@ -187,13 +199,40 @@ Log in as the admin with the email/password you seeded above.
 | GET    | `/api/admin/dashboard`               | admin         | dashboard counts                     |
 | GET    | `/api/admin/reports/{requests,claims,inventory,users}` | admin | reports         |
 
+`GET /api/items` is paginated: pass `page` and `limit` (max 50) and read
+`{ items, pagination: { page, limit, total, totalPages } }`. Search accepts
+`search`, `type` (`lost`/`found`), `category`, and `sort` (`newest`/`oldest`).
+Unknown filters are ignored or rejected rather than passed to the database.
+
 ---
 
-## 8. Manual test checklist
+## 8. Automated tests
+
+The backend has an integration suite built on Node's built-in test runner, so
+there are no extra dependencies. It uses a **separate database**
+(`lostfoundhub_test`), a temporary uploads folder, and drops only that test
+database before and after the run.
+
+```powershell
+cd "LostFoundHub\server"
+npm test
+```
+
+MongoDB must be running. The suite covers registration/login and role
+injection, admin authorization, input/ID/date/image validation, malformed JSON,
+real vs spoofed image uploads and size limits, the full request → approval →
+receipt → claim → handover lifecycle, duplicate/concurrent approvals and claims,
+privacy of contact details and admin notes, soft-delete conflicts, inactive/expired
+tokens, dashboard/report totals, public stats, and safe 404s.
+
+---
+
+## 9. Manual test checklist
 
 ### A. As a normal user
 
-1. **Register** a new account and log in. You land on the **Home** page.
+1. **Register** a new account and log in. You land on the **Home** page, which
+   shows real site statistics and the newest listings from the API.
 2. **Report Item** -> submit a *Found* item (e.g. "Blue Bottle", photo optional).
 3. Open **My Requests** - it shows the request as **pending**.
 4. Submit a *Lost* item too, and confirm both appear under My Requests.
@@ -225,8 +264,8 @@ Log in as the admin with the email/password you seeded above.
 9. **Admin -> Items**: **Delete** an item and give a reason. If it has pending
    claims you are warned first; confirming also rejects those claims.
 10. Confirm the deleted item disappears from the public **Lost/Found Items** page.
-11. **Admin -> Hub Inventory**: see found items, filters, and the counts
-    (Found items / Currently at hub / Awaiting receipt).
+11. **Admin -> Hub Inventory**: see found items, filters, and the global counts
+    (Total / At hub / Awaiting receipt / Collected).
 12. **Admin -> Dashboard**: confirm the counters and the four reports match what
     you did above.
 
@@ -239,7 +278,7 @@ Log in as the admin with the email/password you seeded above.
 
 ---
 
-## 9. Quick debugging tips
+## 10. Quick debugging tips
 
 - **"Could not connect to MongoDB"** - make sure MongoDB is running and
   `MONGODB_URI` is correct.
